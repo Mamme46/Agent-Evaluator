@@ -7,7 +7,8 @@ __pycache__/
 
 # Rapports générés
 reports/*.json
-
+src/attacks/__pycache__/
+src/targets/__pycache__/
 # Divers
 .DS_Store
 .vscode/

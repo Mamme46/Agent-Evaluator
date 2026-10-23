@@ -13,7 +13,7 @@ from src.targets import dummy_agent
 
 # Plafond de tentatives PAR objectif (boucle interne).
 # Un 8B est lent : commence à 2 pour aller vite, augmente ensuite.
-MAX_ATTEMPTS = 2
+MAX_ATTEMPTS = 3
 
 
 def main() -> None:

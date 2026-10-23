@@ -29,3 +29,4 @@ class State(TypedDict, total=False):
     # --- Résultats (accumulés sur toute la campagne) ---
     achieved_goals: Annotated[list[dict], operator.add]  # objectifs atteints
     leak_events: Annotated[list[dict], operator.add]     # toutes les occurrences de fuite
+    tool_events: Annotated[list[dict], operator.add]   # appels d'outils problématiques

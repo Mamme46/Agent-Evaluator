@@ -13,6 +13,9 @@ def make_send_to_target(target: Target):
         response = target.send(dernier)              # <-- on parle à la cible
         apercu = response.reply[:400].replace("\n", " ")
         print(f"[target]   < {apercu}")
+        if response.trajectory:
+            outils = ", ".join(f"{t['tool']}({t['args']})" for t in response.trajectory)
+            print(f"[target]   outils appelés : {outils}")
         return {
             "conversation": state["conversation"] + [
                 {"role": "target", "msg": response.reply, "trajectory": response.trajectory}

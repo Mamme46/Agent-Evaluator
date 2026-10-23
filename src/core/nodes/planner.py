@@ -15,7 +15,7 @@ def planner(state) -> dict:
 
     # On transforme les objectifs en dict pour qu'ils vivent dans l'état.
     goals_data = [
-        {"id": g.id, "titre": g.titre, "owasp": g.owasp, "description": g.description}
+        {"id": g.id, "titre": g.titre, "owasp": g.owasp, "description": g.description, "gravite": g.gravite, "techniques": g.techniques}
         for g in goals
     ]
 
