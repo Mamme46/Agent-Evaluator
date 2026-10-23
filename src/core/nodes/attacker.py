@@ -42,7 +42,7 @@ def attacker(state: State) -> dict:
     message = _llm.invoke(prompt).content.strip()
     attempt_no = state["attempt"] + 1
     print(f"\n[attacker] objectif '{goal['id']}' — tentative {attempt_no}")
-    print(f"           > {message[:120]}")
+    print(f"           > {message[:400]}")
 
     return {
         "attempt": attempt_no,

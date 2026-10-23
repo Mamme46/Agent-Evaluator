@@ -11,7 +11,7 @@ def make_send_to_target(target: Target):
     def send_to_target(state: State) -> dict:
         dernier = state["conversation"][-1]["msg"]   # dernier msg = celui de l'attaquant
         response = target.send(dernier)              # <-- on parle à la cible
-        apercu = response.reply[:120].replace("\n", " ")
+        apercu = response.reply[:400].replace("\n", " ")
         print(f"[target]   < {apercu}")
         return {
             "conversation": state["conversation"] + [

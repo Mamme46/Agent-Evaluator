@@ -1,0 +1,13 @@
+# Environnement virtuel
+.venv/
+
+# Caches Python
+__pycache__/
+*.pyc
+
+# Rapports générés
+reports/*.json
+
+# Divers
+.DS_Store
+.vscode/

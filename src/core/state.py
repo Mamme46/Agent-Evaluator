@@ -27,4 +27,5 @@ class State(TypedDict, total=False):
     current_success: bool      # l'objectif courant a-t-il été atteint ?
 
     # --- Résultats (accumulés sur toute la campagne) ---
-    findings: Annotated[list[dict], operator.add]
+    achieved_goals: Annotated[list[dict], operator.add]  # objectifs atteints
+    leak_events: Annotated[list[dict], operator.add]     # toutes les occurrences de fuite

@@ -25,8 +25,7 @@ def main() -> None:
 
     # 3. État initial. recon/planner rempliront le reste.
     etat_initial = {
-        "max_attempts": MAX_ATTEMPTS,
-        "findings": [],
+        "max_attempts": MAX_ATTEMPTS
     }
 
     # 4. On lance la campagne.
