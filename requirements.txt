@@ -2,3 +2,5 @@ langgraph>=1.2
 langchain>=1.0
 langchain-ollama>=0.2
 pydantic>=2.0
+fastapi>=0.115
+uvicorn>=0.30

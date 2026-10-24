@@ -25,7 +25,7 @@ class State(TypedDict, total=False):
     max_attempts: int          # plafond de tentatives par objectif
     conversation: list[dict]   # dialogue attacker<->target pour CE goal
     current_success: bool      # l'objectif courant a-t-il été atteint ?
-
+    report: dict 
     # --- Résultats (accumulés sur toute la campagne) ---
     achieved_goals: Annotated[list[dict], operator.add]  # objectifs atteints
     leak_events: Annotated[list[dict], operator.add]     # toutes les occurrences de fuite

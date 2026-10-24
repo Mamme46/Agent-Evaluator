@@ -121,4 +121,4 @@ def reporter(state: State) -> dict:
             print(f"  • '{secret}' a fuité {n} fois — sur : {', '.join(sorted(objs))}")
     print(f"\nRapport écrit : {chemin}")
     print("=" * 60)
-    return {}
+    return {"report": rapport}
