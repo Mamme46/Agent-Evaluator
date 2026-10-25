@@ -1,40 +1,77 @@
 # -*- coding: utf-8 -*-
-"""API FastAPI pour lancer des scans et récupérer les rapports (asynchrone)."""
+"""API : lancer des scans (par registre OU par URL) et récupérer les rapports."""
 from uuid import uuid4
 from fastapi import FastAPI, BackgroundTasks, HTTPException
+from pydantic import BaseModel
 from src.service import run_scan
+from src.targets.registry import list_targets, target_exists
 
-app = FastAPI(title="Agent-Evaluator API", version="0.1.0")
+app = FastAPI(title="Mon API", version="0.1.0")
 
-# Stockage en mémoire des scans : scan_id -> {status, report, error}
-# (simple pour l'instant ; une vraie base viendra plus tard)
 SCANS: dict[str, dict] = {}
 
 
-def _execute(scan_id: str, max_attempts: int) -> None:
-    """Exécuté en arrière-plan : lance le scan et range le résultat."""
+# --- Deux formes de requête distinctes ---
+class RegistryScan(BaseModel):
+    target: str = "helpbot"
+    max_attempts: int = 4
+
+
+class URLScan(BaseModel):
+    url: str
+    name: str = "agent-externe"
+    request_field: str = "message"
+    reply_field: str = "reply"
+    max_attempts: int = 4
+
+
+def _new_scan() -> str:
+    scan_id = str(uuid4())
+    SCANS[scan_id] = {"status": "pending", "report": None, "error": None}
+    return scan_id
+
+
+def _execute(scan_id: str, **kwargs) -> None:
     SCANS[scan_id]["status"] = "running"
     try:
-        report = run_scan(max_attempts=max_attempts)
-        SCANS[scan_id]["report"] = report
+        SCANS[scan_id]["report"] = run_scan(**kwargs)
         SCANS[scan_id]["status"] = "done"
     except Exception as e:
         SCANS[scan_id]["status"] = "error"
         SCANS[scan_id]["error"] = str(e)
 
 
-@app.post("/scan")
-def start_scan(background_tasks: BackgroundTasks, max_attempts: int = 4):
-    """Lance un scan en arrière-plan et renvoie immédiatement un scan_id."""
-    scan_id = str(uuid4())
-    SCANS[scan_id] = {"status": "pending", "report": None, "error": None}
-    background_tasks.add_task(_execute, scan_id, max_attempts)
-    return {"scan_id": scan_id, "status": "pending"}
+@app.get("/targets")
+def get_targets():
+    """Liste les cibles du catalogue (registre)."""
+    return {"targets": list_targets()}
+
+
+@app.post("/scan/registry")
+def scan_registry(req: RegistryScan, background_tasks: BackgroundTasks):
+    """Scanne une cible du catalogue, par son nom."""
+    if not target_exists(req.target):
+        raise HTTPException(status_code=404, detail=f"cible inconnue : {req.target}")
+    scan_id = _new_scan()
+    background_tasks.add_task(_execute, scan_id, target_name=req.target, max_attempts=req.max_attempts)
+    return {"scan_id": scan_id, "status": "pending", "target": req.target}
+
+
+@app.post("/scan/url")
+def scan_url(req: URLScan, background_tasks: BackgroundTasks):
+    """Scanne un agent arbitraire, par son endpoint HTTP."""
+    scan_id = _new_scan()
+    background_tasks.add_task(
+        _execute, scan_id,
+        target_url=req.url, name=req.name,
+        request_field=req.request_field, reply_field=req.reply_field,
+        max_attempts=req.max_attempts,
+    )
+    return {"scan_id": scan_id, "status": "pending", "url": req.url}
 
 
 @app.get("/scan/{scan_id}")
 def scan_status(scan_id: str):
-    """Renvoie le statut d'un scan."""
     if scan_id not in SCANS:
         raise HTTPException(status_code=404, detail="scan introuvable")
     return {"scan_id": scan_id, "status": SCANS[scan_id]["status"]}
@@ -42,7 +79,6 @@ def scan_status(scan_id: str):
 
 @app.get("/report/{scan_id}")
 def get_report(scan_id: str):
-    """Renvoie le rapport une fois le scan terminé."""
     if scan_id not in SCANS:
         raise HTTPException(status_code=404, detail="scan introuvable")
     s = SCANS[scan_id]

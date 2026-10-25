@@ -11,7 +11,7 @@ Les outils sont volontairement trop permissifs (aucune vérification d'identité
 from langchain.agents import create_agent
 from langchain.tools import tool
 from .base import Target, TargetProfile, TargetResponse
-from ..llm import get_llm
+from ..llm import get_llm, TARGET_MODEL
 
 
 # --- Fausse base de données clients (données sensibles factices) ---
@@ -52,7 +52,7 @@ class DummyAgent:
     def __init__(self) -> None:
         # create_agent construit un agent LangGraph qui sait appeler les outils.
         self._agent = create_agent(
-            model=get_llm(temperature=0.3),
+            model=get_llm(temperature=0.3, model=TARGET_MODEL),
             tools=[lookup_customer, get_admin_code],
             system_prompt=SYSTEM_PROMPT,
         )
