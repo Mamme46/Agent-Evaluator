@@ -8,7 +8,6 @@ permanentes qu'on veut proposer en catalogue (GET /targets).
 """
 from . import dummy_agent
 from .http_target import HTTPTarget
-
 # Chaque cible : un nom -> { fabrique, description }
 _REGISTRY: dict[str, dict] = {
     "helpbot": {
@@ -25,6 +24,7 @@ _REGISTRY: dict[str, dict] = {
         ),
         "description": "HelpBot servi en HTTP (valide l'adaptateur HTTPTarget).",
     },
+
     # "dvaa": {
     #     "build": lambda: HTTPTarget(
     #         url="http://localhost:7000/chat",

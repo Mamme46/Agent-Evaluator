@@ -6,24 +6,21 @@ from .targets.registry import get_target
 MAX_ATTEMPTS = 4
 
 
-def run_scan(
-    target_name: str | None = None,
-    target_url: str | None = None,
-    request_field: str = "message",
-    reply_field: str = "reply",
-    name: str = "agent-externe",
-    max_attempts: int = MAX_ATTEMPTS,
-) -> dict:
-    """Scan par NOM (registre) ou par URL (agent arbitraire)."""
+def run_scan(target_name=None, target_url=None, target_format="flat",
+             request_field="message", reply_field="reply",
+             name="agent-externe", model="gpt-4o", capabilities=None,
+             max_attempts=MAX_ATTEMPTS) -> dict:
     if target_url:
-        from .targets.http_target import HTTPTarget
-        target = HTTPTarget(
-            url=target_url, name=name,
-            request_field=request_field, reply_field=reply_field,
-        )
+        if target_format == "openai":
+            from .targets.openai_target import OpenAICompatibleTarget
+            target = OpenAICompatibleTarget(url=target_url, model=model,
+                                            name=name, capabilities=capabilities)
+        else:
+            from .targets.http_target import HTTPTarget
+            target = HTTPTarget(url=target_url, name=name, capabilities=capabilities,
+                                request_field=request_field, reply_field=reply_field)
     else:
         target = get_target(target_name or "helpbot")
-
     graph = build_graph(target)
     final_state = graph.invoke({"max_attempts": max_attempts}, config={"recursion_limit": 100})
     return final_state.get("report", {})

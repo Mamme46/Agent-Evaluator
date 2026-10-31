@@ -11,17 +11,24 @@ app = FastAPI(title="Mon API", version="0.1.0")
 SCANS: dict[str, dict] = {}
 
 
-# --- Deux formes de requête distinctes ---
+# --- Formes de requête ---
 class RegistryScan(BaseModel):
     target: str = "helpbot"
     max_attempts: int = 4
 
 
-class URLScan(BaseModel):
+class FlatURLScan(BaseModel):
     url: str
     name: str = "agent-externe"
     request_field: str = "message"
     reply_field: str = "reply"
+    max_attempts: int = 4
+
+
+class OpenAIURLScan(BaseModel):
+    url: str
+    name: str = "agent-externe"
+    model: str = "gpt-4o"
     max_attempts: int = 4
 
 
@@ -39,6 +46,7 @@ def _execute(scan_id: str, **kwargs) -> None:
     except Exception as e:
         SCANS[scan_id]["status"] = "error"
         SCANS[scan_id]["error"] = str(e)
+        print(f"[ERREUR scan {scan_id}] {e}")   # visible dans le terminal
 
 
 @app.get("/targets")
@@ -57,15 +65,27 @@ def scan_registry(req: RegistryScan, background_tasks: BackgroundTasks):
     return {"scan_id": scan_id, "status": "pending", "target": req.target}
 
 
-@app.post("/scan/url")
-def scan_url(req: URLScan, background_tasks: BackgroundTasks):
-    """Scanne un agent arbitraire, par son endpoint HTTP."""
+@app.post("/scan/url/flat")
+def scan_url_flat(req: FlatURLScan, background_tasks: BackgroundTasks):
+    """Scanne un agent à format PLAT ({champ} -> {champ})."""
     scan_id = _new_scan()
     background_tasks.add_task(
         _execute, scan_id,
-        target_url=req.url, name=req.name,
+        target_url=req.url, target_format="flat", name=req.name,
         request_field=req.request_field, reply_field=req.reply_field,
         max_attempts=req.max_attempts,
+    )
+    return {"scan_id": scan_id, "status": "pending", "url": req.url}
+
+
+@app.post("/scan/url/openai")
+def scan_url_openai(req: OpenAIURLScan, background_tasks: BackgroundTasks):
+    """Scanne un agent compatible OpenAI (/v1/chat/completions)."""
+    scan_id = _new_scan()
+    background_tasks.add_task(
+        _execute, scan_id,
+        target_url=req.url, target_format="openai", name=req.name,
+        model=req.model, max_attempts=req.max_attempts,
     )
     return {"scan_id": scan_id, "status": "pending", "url": req.url}
 

@@ -15,6 +15,8 @@ class State(TypedDict, total=False):
     target_name: str
     target_role: str
     target_caps: list[str]
+    target_tools: list[str]      # outils détectés par le recon actif
+    attack_surface: str          # surface d'attaque résumée
 
     # --- Plan de campagne (boucle externe) ---
     goals: list[dict]          # objectifs choisis par le planner
