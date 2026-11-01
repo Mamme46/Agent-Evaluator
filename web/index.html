@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent-Evaluator — Console</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar" aria-label="Navigation principale">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.4"/>
+        <circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.7"/>
+        <circle cx="12" cy="12" r="1.6" fill="currentColor"/>
+        <line x1="12" y1="12" x2="19.5" y2="6" stroke="currentColor" stroke-width="1.4"/>
+      </svg>
+      <div class="brand-text">
+        <h1>Agent-Evaluator</h1>
+        <p class="tagline">Red-team &amp; AI-as-judge</p>
+      </div>
+    </div>
+
+    <nav class="side-nav">
+      <span class="side-section">Console</span>
+      <a class="nav-item active" href="#scan" data-view="scan">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" stroke-width="1.6"/>
+          <line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="1.6"/>
+          <line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="1.6"/>
+          <line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="1.6"/>
+        </svg>
+        <span class="nav-label">Scan</span>
+        <span id="nav-running" class="nav-pulse hidden" title="Scan en cours"></span>
+      </a>
+      <a class="nav-item" href="#historique" data-view="history">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <polyline points="3,3 3.5,7 7.5,6.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <polyline points="12,7.5 12,12 15,14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="nav-label">Historique</span>
+        <span id="nav-count" class="nav-count hidden"></span>
+      </a>
+    </nav>
+
+    <div class="side-foot">
+      <div id="api-status" class="api-status" title="État de l'API">
+        <span class="dot"></span><span class="label">connexion…</span>
+      </div>
+      <p class="side-ref">OWASP Top 10 · Agentic Apps</p>
+    </div>
+  </aside>
+
+  <div class="content">
+  <!-- ===================== VUE : SCAN ===================== -->
+  <header id="head-scan" class="page-head view-head">
+    <h2>Nouveau scan</h2>
+    <p>Choisis une cible du registre ou un agent par URL, puis lance l'évaluation.</p>
+  </header>
+  <main id="view-scan" class="view layout">
+    <!-- CONFIG -->
+    <section class="panel config" aria-label="Configuration du scan">
+      <h2 class="panel-title">Nouveau scan</h2>
+
+      <div class="modes" role="tablist">
+        <button class="mode-btn active" data-mode="registry" role="tab" type="button">Cible du registre</button>
+        <button class="mode-btn" data-mode="url" role="tab" type="button">Agent par URL</button>
+      </div>
+
+      <form id="scan-form">
+        <!-- Mode registre -->
+        <div class="field group-registry">
+          <label for="target-select">Cible</label>
+          <select id="target-select"></select>
+          <p class="hint" id="target-desc"></p>
+        </div>
+
+        <!-- Mode URL -->
+        <div class="field group-url hidden">
+          <label for="url-input">Endpoint de l'agent</label>
+          <input id="url-input" type="url" placeholder="http://localhost:7001/v1/chat/completions" />
+        </div>
+        <div class="field group-url hidden">
+          <label for="format-select">Format</label>
+          <select id="format-select">
+            <option value="openai">OpenAI-compatible (/v1/chat/completions)</option>
+            <option value="flat">JSON plat (champ requête → champ réponse)</option>
+          </select>
+        </div>
+        <div class="field group-url group-flat hidden">
+          <label for="request-field">Champ requête</label>
+          <input id="request-field" type="text" placeholder="message" />
+        </div>
+        <div class="field group-url group-flat hidden">
+          <label for="reply-field">Champ réponse</label>
+          <input id="reply-field" type="text" placeholder="reply" />
+        </div>
+
+        <!-- Commun -->
+        <div class="field">
+          <label for="name-input">Nom <span class="opt">(optionnel)</span></label>
+          <input id="name-input" type="text" placeholder="ex. legacybot" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="attempts-input">Tentatives / objectif</label>
+            <input id="attempts-input" type="number" min="1" max="10" value="3" />
+          </div>
+          <div class="field">
+            <label for="model-input">Modèle <span class="opt">(optionnel)</span></label>
+            <input id="model-input" type="text" placeholder="défaut" />
+          </div>
+        </div>
+
+        <button type="submit" id="launch-btn" class="launch">
+          <span class="launch-label">Lancer le scan</span>
+        </button>
+        <p id="form-error" class="form-error hidden"></p>
+      </form>
+    </section>
+
+    <!-- RÉSULTATS -->
+    <section class="panel results" aria-label="Résultats">
+      <div id="empty-state" class="empty">
+        <svg viewBox="0 0 24 24" class="empty-icon" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+        <p>Configure une cible puis lance un scan.</p>
+      </div>
+
+      <div id="running-state" class="running hidden">
+        <div class="spinner"></div>
+        <h3 id="running-title">Scan en cours…</h3>
+        <p id="running-sub" class="running-sub">Initialisation</p>
+        <button id="stop-btn" class="stop" type="button">Arrêter le scan</button>
+      </div>
+
+      <div id="report-state" class="report hidden"></div>
+    </section>
+  </main>
+
+  <!-- ===================== VUE : HISTORIQUE ===================== -->
+  <header id="head-history" class="page-head view-head hidden">
+    <h2>Historique des scans</h2>
+    <p>Tous les rapports archivés, du plus récent au plus ancien.</p>
+  </header>
+  <main id="view-history" class="view view-single hidden">
+    <!-- Liste des rapports -->
+    <section id="history-grid-panel" class="panel" aria-label="Rapports archivés">
+      <h2 class="panel-title">Rapports archivés</h2>
+      <div id="history-grid" class="history-grid"></div>
+    </section>
+
+    <!-- Rapport sélectionné -->
+    <section id="history-report-panel" class="panel hidden" aria-label="Rapport">
+      <button id="hist-back" class="hist-back" type="button">← Retour aux rapports</button>
+      <div id="history-report" class="report"></div>
+    </section>
+  </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

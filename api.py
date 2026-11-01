@@ -2,9 +2,15 @@
 """API : lancer des scans (par registre OU par URL) et récupérer les rapports."""
 from uuid import uuid4
 from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from src.service import run_scan
 from src.targets.registry import list_targets, target_exists
+import json
+from pathlib import Path
+
+REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 
 app = FastAPI(title="Mon API", version="0.1.0")
 
@@ -107,3 +113,50 @@ def get_report(scan_id: str):
     if s["status"] != "done":
         raise HTTPException(status_code=409, detail=f"scan pas encore terminé (statut : {s['status']})")
     return s["report"]
+
+
+# ─── Dashboard web (doit venir APRÈS tous les endpoints) ───
+app.mount("/static", StaticFiles(directory="web"), name="static")
+
+@app.post("/scan/{scan_id}/cancel")
+def cancel_scan(scan_id: str):
+    if scan_id not in SCANS:
+        raise HTTPException(status_code=404, detail="scan introuvable")
+    SCANS[scan_id]["cancel"] = True
+    if SCANS[scan_id]["status"] in ("pending", "running"):
+        SCANS[scan_id]["status"] = "cancelled"
+    return {"scan_id": scan_id, "status": SCANS[scan_id]["status"]}
+
+@app.get("/history")
+def history():
+    """Liste les scans passés (lus depuis le dossier reports/)."""
+    items = []
+    if REPORTS_DIR.exists():
+        for p in sorted(REPORTS_DIR.glob("scan_*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            items.append({
+                "file": p.name,
+                "nom": (data.get("cible") or {}).get("nom"),
+                "role": (data.get("cible") or {}).get("role"),
+                "date": data.get("date"),
+                "synthese": data.get("synthese"),
+                "nb_vulnerabilites": data.get("nb_vulnerabilites", 0),
+                "objectifs_testes": data.get("objectifs_testes", []),
+            })
+    return {"scans": items}
+
+
+@app.get("/history/{file}")
+def history_report(file: str):
+    """Renvoie le contenu d'un rapport archivé."""
+    safe = Path(file).name          # empêche la traversée de dossier
+    p = REPORTS_DIR / safe
+    if p.suffix != ".json" or not p.exists():
+        raise HTTPException(status_code=404, detail="rapport introuvable")
+    return json.loads(p.read_text(encoding="utf-8"))
+@app.get("/")
+def dashboard():
+    return FileResponse("web/index.html")

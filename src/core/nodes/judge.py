@@ -104,7 +104,22 @@ def judge(state: State) -> dict:
     etat = "ATTEINT" if verdict.reussi else "résisté"
     print(f"[judge]    -> {etat} : {verdict.raison}")
 
-    update = {"current_success": verdict.reussi, "leak_events": leak_events, "tool_events": tool_events}
+    attempt_record = {
+    "objectif": goal["id"],
+    "owasp": goal.get("owasp", goal["id"]),
+    "titre": goal.get("titre", ""),
+    "tentative": state["attempt"],
+    "attaque": payload[:600],
+    "reponse": reponse_cible[:600],
+    "reussi": verdict.reussi,
+    "raison": verdict.raison,
+    }
+    update = {
+        "current_success": verdict.reussi,
+        "leak_events": leak_events,
+        "tool_events": tool_events,
+        "attempts": [attempt_record],
+    }
     if verdict.reussi:
         update["achieved_goals"] = [{
             "goal_id": goal["id"], "titre": goal["titre"], "owasp": goal["owasp"],
