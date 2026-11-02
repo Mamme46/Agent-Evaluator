@@ -127,6 +127,23 @@ def cancel_scan(scan_id: str):
         SCANS[scan_id]["status"] = "cancelled"
     return {"scan_id": scan_id, "status": SCANS[scan_id]["status"]}
 
+class AutoURLScan(BaseModel):
+    url: str
+    name: str = "agent-externe"
+    model: str = "gpt-4o"          # utilisé seulement si le format détecté est OpenAI
+    max_attempts: int = 4
+
+
+@app.post("/scan/url/auto")
+def scan_url_auto(req: AutoURLScan, background_tasks: BackgroundTasks):
+    """Scanne un agent dont le format est AUTO-DÉTECTÉ (aucun champ à préciser)."""
+    scan_id = _new_scan()
+    background_tasks.add_task(
+        _execute, scan_id,
+        target_url=req.url, target_format="auto", name=req.name,
+        model=req.model, max_attempts=req.max_attempts,
+    )
+    return {"scan_id": scan_id, "status": "pending", "url": req.url}
 @app.get("/history")
 def history():
     """Liste les scans passés (lus depuis le dossier reports/)."""
