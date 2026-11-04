@@ -11,7 +11,10 @@ def run_scan(target_name=None, target_url=None, target_format="auto",
              name="agent-externe", model="gpt-4o", capabilities=None,
              max_attempts=MAX_ATTEMPTS) -> dict:
     if target_url:
-        if target_format == "auto":
+        if target_format == "mcp":
+            from .targets.mcp_target import MCPTarget
+            target = MCPTarget(url=target_url, name=name, capabilities=capabilities)
+        elif target_format == "auto":
             # Détection automatique du format (aucun champ à préciser).
             from .targets.autodetect import build_auto_target
             target = build_auto_target(url=target_url, name=name, model=model,

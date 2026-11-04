@@ -12,6 +12,7 @@ const CONFIG = {
     scanAuto:     "/scan/url/auto",
     scanFlat:     "/scan/url/flat",
     scanOpenai:   "/scan/url/openai",
+    scanMcp:      "/scan/url/mcp",
     scanStatus:   (id) => `/scan/${id}`,
     scanCancel:   (id) => `/scan/${id}/cancel`,
     report:       (id) => `/report/${id}`,
@@ -57,19 +58,10 @@ async function postJSON(url, body) {
 }
 
 /* ---------- navigation entre vues ---------- */
-const ROUTES = { "#scan": "scan", "#historique": "history" };
-
-function viewFromHash() {
-  return ROUTES[location.hash] || "scan";
-}
-
 function setView(view) {
-  $$(".nav-item").forEach((t) => t.classList.toggle("active", t.dataset.view === view));
+  $$(".nav-tab").forEach((t) => t.classList.toggle("active", t.dataset.view === view));
   $("#view-scan").classList.toggle("hidden", view !== "scan");
-  $("#head-scan").classList.toggle("hidden", view !== "scan");
   $("#view-history").classList.toggle("hidden", view !== "history");
-  $("#head-history").classList.toggle("hidden", view !== "history");
-  window.scrollTo({ top: 0 });
   if (view === "history") {
     $("#history-report-panel").classList.add("hidden");
     $("#history-grid-panel").classList.remove("hidden");
@@ -148,6 +140,9 @@ function buildPayload() {
   if (fmt === "auto") {
     return { url: CONFIG.endpoints.scanAuto, body: { ...common, url } };
   }
+  if (fmt === "mcp") {
+    return { url: CONFIG.endpoints.scanMcp, body: { ...common, url } };
+  }
   if (fmt === "openai") {
     return { url: CONFIG.endpoints.scanOpenai, body: { ...common, url } };
   }
@@ -222,11 +217,7 @@ function startPolling(id) {
 async function loadHistory() {
   try {
     const data = await getJSON(CONFIG.endpoints.history);
-    const scans = data.scans || [];
-    const badge = $("#nav-count");
-    badge.textContent = scans.length;
-    badge.classList.toggle("hidden", !scans.length);
-    renderHistory(scans);
+    renderHistory(data.scans || []);
   } catch {
     $("#history-grid").innerHTML = `<p class="hist-empty">Historique indisponible (API injoignable).</p>`;
   }
@@ -273,7 +264,6 @@ async function stopScan() {
   clearInterval(pollTimer);
   const id = currentScanId;
   $("#stop-btn").disabled = true;
-  setRunningBadge(false);
   if (id) {
     try { await postJSON(CONFIG.endpoints.scanCancel(id), {}); } catch {}
   }
@@ -286,12 +276,7 @@ async function stopScan() {
 }
 
 /* ---------- affichage (vue scan) ---------- */
-function setRunningBadge(on) {
-  $("#nav-running").classList.toggle("hidden", !on);
-}
-
 function showRunning(label) {
-  setRunningBadge(true);
   $("#empty-state").classList.add("hidden");
   $("#report-state").classList.add("hidden");
   $("#running-state").classList.remove("hidden");
@@ -300,7 +285,6 @@ function showRunning(label) {
 }
 
 function showError(msg) {
-  setRunningBadge(false);
   $("#running-state").classList.add("hidden");
   const box = $("#report-state");
   box.classList.remove("hidden");
@@ -315,7 +299,6 @@ async function showReport(id, statusObj) {
     try { report = await getJSON(CONFIG.endpoints.report(id)); }
     catch (e) { return showError("Scan terminé mais rapport introuvable : " + e.message); }
   }
-  setRunningBadge(false);
   $("#running-state").classList.add("hidden");
   $("#empty-state").classList.add("hidden");
   const box = $("#report-state");
@@ -420,7 +403,7 @@ function buildReportHTML(r) {
 
 /* ---------- init ---------- */
 document.addEventListener("DOMContentLoaded", () => {
-  window.addEventListener("hashchange", () => setView(viewFromHash()));
+  $$(".nav-tab").forEach((t) => t.addEventListener("click", () => setView(t.dataset.view)));
   $$(".mode-btn").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
   $("#format-select").addEventListener("change", syncFlatFields);
   $("#target-select").addEventListener("change", updateTargetDesc);
@@ -431,7 +414,6 @@ document.addEventListener("DOMContentLoaded", () => {
     $("#history-grid-panel").classList.remove("hidden");
   });
   setMode("registry");
-  setView(viewFromHash());
+  setView("scan");
   loadTargets();
-  loadHistory();   // remplit le compteur de la sidebar
 });

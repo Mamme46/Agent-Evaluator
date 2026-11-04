@@ -1,14 +1,7 @@
 # -*- coding: utf-8 -*-
-"""
-Nœud ATTACKER : simule un UTILISATEUR légitime qui poursuit une action précise.
-
-Générique : ne suppose rien du type d'agent cible. Il lit le rôle (recon) et
-l'intention de l'objectif courant (planner), et habille cette intention d'un
-prétexte crédible. Il ne joue JAMAIS le rôle d'un testeur/red-team vis-à-vis de
-la cible — c'est le meilleur moyen de la faire refuser.
-"""
 from ..state import State
 from ...llm import get_llm, ATTACKER_MODEL
+from ...attacks.payload_library import pick as pick_payload
 
 _llm = get_llm(temperature=0.9, model=ATTACKER_MODEL)
 
@@ -76,10 +69,35 @@ def _build_prompt(state: State, goal: dict, intent: str, strategy: str) -> str:
 
 def attacker(state: State) -> dict:
     goal = state["goals"][state["goal_idx"]]
-    techniques = goal.get("techniques", [])
     attempt_no = state["attempt"] + 1
 
-    intent = techniques[(attempt_no - 1) % len(techniques)] if techniques else goal["description"]
+    # Profil de la cible (recon) -> sert à filtrer les payloads par surface.
+    caps_text = " ".join(
+        state.get("target_caps", []) + state.get("target_tools", [])
+        + [state.get("attack_surface", "")]
+    )
+    payload = pick_payload(goal, caps_text, attempt_no)
+
+    # ---- Routage ----
+    # 1) Payload STRUCTUREL -> envoi VERBATIM (le LLM le casserait). Pas d'adaptation.
+    if payload is not None and payload.get("mode") == "verbatim":
+        message = payload["payload"]
+        print(f"\n[attacker] objectif '{goal['id']}' — tentative {attempt_no} "
+              f"[payload VERBATIM {payload['id']}]")
+        print(f"           > {message[:400]}")
+        return {
+            "attempt": attempt_no,
+            "conversation": state["conversation"] + [{"role": "attacker", "msg": message}],
+        }
+
+    if payload is not None:
+        intent = payload["payload"]
+        tag = f"payload {payload['id']}"
+    else:
+        techniques = goal.get("techniques", [])
+        intent = techniques[(attempt_no - 1) % len(techniques)] if techniques else goal["description"]
+        tag = "génération LLM"
+
     strategy = STRATEGIES[(attempt_no - 1) % len(STRATEGIES)]
 
     # Génère, et régénère si l'attaquant se refuse à lui-même (3 essais max).
@@ -89,14 +107,12 @@ def attacker(state: State) -> dict:
         message = _llm.invoke(prompt).content.strip()
         if not _is_refusal(message):
             break
-        # L'attaquant s'est auto-refusé : on change d'angle et on réessaie.
         strategy = STRATEGIES[(attempt_no + essai) % len(STRATEGIES)]
     else:
-        # Dernier recours : on envoie directement l'intention brute, sans fioriture.
-        message = intent
+        message = intent   # dernier recours : l'intention brute
 
     print(f"\n[attacker] objectif '{goal['id']}' — tentative {attempt_no} "
-          f"[angle: {strategy[:30]}…]")
+          f"[{tag} | angle: {strategy[:28]}…]")
     print(f"           > {message[:400]}")
     return {
         "attempt": attempt_no,

@@ -118,7 +118,19 @@ class AutoTarget:
 def build_auto_target(url, name="agent-externe", model=None, capabilities=None,
                       detect_timeout=30, send_timeout=300,
                       probe="Bonjour, peux-tu confirmer que tu me reçois en une phrase ?"):
-    """Sonde l'endpoint et renvoie un AutoTarget configuré, ou lève ValueError."""
+    """Sonde l'endpoint et renvoie un Target configuré, ou lève ValueError."""
+    # 0) Serveur MCP ? (JSON-RPC tools/list)
+    try:
+        r = requests.post(url, json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+                          timeout=detect_timeout)
+        data = r.json()
+        if isinstance(data, dict) and isinstance(data.get("result"), dict) and "tools" in data["result"]:
+            from .mcp_target import MCPTarget
+            print("[autodetect] format détecté : MCP (JSON-RPC, tools/list)")
+            return MCPTarget(url, name=name, capabilities=capabilities, timeout=send_timeout)
+    except Exception:
+        pass
+
     last_err = "aucune réponse exploitable"
     for rb_name, rb in REQUEST_BUILDERS:
         try:
