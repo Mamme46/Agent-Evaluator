@@ -43,7 +43,26 @@ _recon_llm = get_llm(temperature=0.0).with_structured_output(AgentProfile)
 
 def make_recon(target: Target):
     def recon(state) -> dict:
-        base = target.describe()           # nom (+ indice éventuel)
+        base = target.describe()
+
+        if hasattr(target, "list_tools"):
+            tools = target.list_tools()
+            specs = [
+                {"name": t.get("name"),
+                 "params": list((t.get("inputSchema", {}).get("properties") or {}).keys())}
+                for t in tools if t.get("name")
+            ]
+            names = [s["name"] for s in specs]
+            print("[recon] rôle = Serveur MCP (expose des outils)")
+            print(f"[recon] outils = {names}")
+            return {
+                "target_name": base.name,
+                "target_role": "Serveur MCP (expose des outils)",
+                "target_caps": names,
+                "target_tools": names,
+                "attack_surface": "Outils MCP exposés (appels tools/call)",
+                "mcp_tools": specs,
+            }
 
         # 1. Sondage COMPORTEMENTAL : on lui demande d'AGIR, on observe
         exchanges = []

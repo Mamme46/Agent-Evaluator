@@ -17,6 +17,7 @@ class State(TypedDict, total=False):
     target_caps: list[str]
     target_tools: list[str]      # outils détectés par le recon actif
     attack_surface: str          # surface d'attaque résumée
+    mcp_tools: list[dict]        # specs des outils MCP : [{name, params}]
 
     # --- Plan de campagne (boucle externe) ---
     goals: list[dict]          # objectifs choisis par le planner
