@@ -1,21 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 Détection AUTOMATIQUE du format d'un agent HTTP inconnu.
-
-Idée : on ne demande pas le format à l'utilisateur. On envoie un petit message
-anodin et on essaie plusieurs FORMES DE REQUÊTE candidates ; pour chacune, on
-tente plusieurs EXTRACTEURS DE RÉPONSE. La première combinaison qui renvoie une
-réponse textuelle non vide est retenue et figée pour tout le scan.
-
-Fonctionne pour : OpenAI-compatible (/v1/chat/completions), et la plupart des
-APIs « plates » ({message|input|prompt|query|text|question} -> {reply|response|
-message|output|text|content|answer|...}), y compris réponses en texte brut.
 """
 import requests
 from .base import TargetResponse, TargetProfile
+from .mcp_target import MCPTarget
 
 
-# ---------- Formes de requête candidates (ordre = priorité) ----------
 def _req_openai(msg, model):
     return {"model": model or "gpt-4o", "messages": [{"role": "user", "content": msg}]}
 
@@ -38,7 +29,6 @@ REQUEST_BUILDERS = [
 ]
 
 
-# ---------- Extracteurs de réponse (ordre = priorité) ----------
 def _oa(d):        return d["choices"][0]["message"]["content"]
 def _oa_text(d):   return d["choices"][0]["text"]
 def _top(key):     return lambda d: d[key]
@@ -66,7 +56,6 @@ _JSON_EXTRACTORS = [
 
 
 def _extract(resp, fn):
-    """Applique un extracteur JSON ; renvoie une str non vide ou None."""
     try:
         val = fn(resp.json())
     except Exception:
@@ -85,27 +74,26 @@ def _extract_plaintext(resp):
 
 
 class AutoTarget:
-    """Cible dont le format a été détecté. Implémente le protocole Target."""
-
     def __init__(self, url, req_builder, extractor_name, extractor_fn,
-                 name, capabilities, model, send_timeout):
+                 name, capabilities, model, send_timeout, headers=None):
         self.url = url
         self._build = req_builder
         self._extractor_name = extractor_name
-        self._extractor_fn = extractor_fn          # None -> texte brut
+        self._extractor_fn = extractor_fn
         self._name = name
         self._caps = capabilities or []
         self._model = model
         self._timeout = send_timeout
+        self._headers = headers
 
     def describe(self) -> TargetProfile:
-        # Le rôle réel est déterminé par le recon actif ; placeholder ici.
         return TargetProfile(name=self._name, role="Agent distant (format auto-détecté)",
                              capabilities=self._caps)
 
     def send(self, message: str) -> TargetResponse:
         try:
-            r = requests.post(self.url, json=self._build(message, self._model), timeout=self._timeout)
+            r = requests.post(self.url, json=self._build(message, self._model),
+                              headers=self._headers, timeout=self._timeout)
             if self._extractor_fn is None:
                 reply = (r.text or "").strip() or "[réponse vide]"
             else:
@@ -116,42 +104,40 @@ class AutoTarget:
 
 
 def build_auto_target(url, name="agent-externe", model=None, capabilities=None,
-                      detect_timeout=30, send_timeout=300,
+                      detect_timeout=60, send_timeout=300, headers=None,
                       probe="Bonjour, peux-tu confirmer que tu me reçois en une phrase ?"):
-    """Sonde l'endpoint et renvoie un Target configuré, ou lève ValueError."""
-    # 0) Serveur MCP ? (JSON-RPC tools/list)
+    _mcp_data = None
     try:
         r = requests.post(url, json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
-                          timeout=detect_timeout)
-        data = r.json()
-        if isinstance(data, dict) and isinstance(data.get("result"), dict) and "tools" in data["result"]:
-            from .mcp_target import MCPTarget
-            print("[autodetect] format détecté : MCP (JSON-RPC, tools/list)")
-            return MCPTarget(url, name=name, capabilities=capabilities, timeout=send_timeout)
+                          headers=headers, timeout=detect_timeout)
+        _mcp_data = r.json()
     except Exception:
-        pass
+        _mcp_data = None
+    if (isinstance(_mcp_data, dict) and isinstance(_mcp_data.get("result"), dict)
+            and "tools" in _mcp_data["result"]):
+        print("[autodetect] format détecté : MCP (JSON-RPC, tools/list)")
+        return MCPTarget(url, name=name, capabilities=capabilities,
+                         timeout=send_timeout, headers=headers)
 
     last_err = "aucune réponse exploitable"
     for rb_name, rb in REQUEST_BUILDERS:
         try:
-            r = requests.post(url, json=rb(probe, model), timeout=detect_timeout)
+            r = requests.post(url, json=rb(probe, model), headers=headers,
+                              timeout=detect_timeout)
         except Exception as e:
             last_err = f"requête '{rb_name}' -> {e}"
             continue
         if r.status_code != 200:
             last_err = f"requête '{rb_name}' -> HTTP {r.status_code}"
             continue
-
-        # 1) extracteurs JSON
         for ex_name, ex_fn in _JSON_EXTRACTORS:
             if _extract(r, ex_fn):
                 print(f"[autodetect] format détecté : requête='{rb_name}', réponse='{ex_name}'")
-                return AutoTarget(url, rb, ex_name, ex_fn, name, capabilities, model, send_timeout)
-        # 2) texte brut
+                return AutoTarget(url, rb, ex_name, ex_fn, name, capabilities,
+                                  model, send_timeout, headers=headers)
         if _extract_plaintext(r):
             print(f"[autodetect] format détecté : requête='{rb_name}', réponse='texte brut'")
-            return AutoTarget(url, rb, "texte brut", None, name, capabilities, model, send_timeout)
-
+            return AutoTarget(url, rb, "texte brut", None, name, capabilities,
+                              model, send_timeout, headers=headers)
         last_err = f"requête '{rb_name}' -> 200 mais réponse non reconnue"
-
     raise ValueError(f"Format non détecté pour {url} ({last_err}).")

@@ -18,7 +18,7 @@ class HTTPTarget:
         reply_field: str = "reply",            # champ de sortie de l'agent
         trajectory_field: str = "trajectory",  # champ trajectoire (si exposé)
         headers: dict | None = None,           # ex. {"Authorization": "Bearer ..."}
-        timeout: int = 60,
+        timeout: int = 300,
     ):
         self.url = url
         self._name = name

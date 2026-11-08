@@ -18,6 +18,7 @@ const CONFIG = {
     report:       (id) => `/report/${id}`,
     history:      "/history",
     historyFile:  (f) => `/history/${encodeURIComponent(f)}`,
+    scanHosted:   "/scan/hosted",
   },
   doneStatuses:  ["done", "terminé", "termine", "completed", "finished", "ok"],
   errorStatuses: ["error", "erreur", "failed", "échec", "echec"],
@@ -80,6 +81,8 @@ function setMode(mode) {
   $$(".mode-btn").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
   $$(".group-registry").forEach((e) => e.classList.toggle("hidden", mode !== "registry"));
   $$(".group-url").forEach((e) => e.classList.toggle("hidden", mode !== "url"));
+  $$(".group-hosted").forEach((e) => e.classList.toggle("hidden", mode !== "hosted"));
+  $$(".group-auth").forEach((e) => e.classList.toggle("hidden", mode === "registry"));
   if (mode === "url") syncFlatFields();
 }
 
@@ -123,6 +126,24 @@ function updateTargetDesc() {
 }
 
 /* ---------- lancement ---------- */
+function parseEnv(text) {
+  const env = {};
+  text.split("\n").forEach((line) => {
+    const l = line.trim();
+    if (!l || l.startsWith("#")) return;
+    const i = l.indexOf("=");
+    if (i > 0) env[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+  });
+  return env;
+}
+
+function withAuth(body) {
+  const h = $("#auth-header").value.trim();
+  const v = $("#auth-value").value.trim();
+  if (h && v) { body.auth_header = h; body.auth_value = v; }
+  return body;
+}
+
 function buildPayload() {
   const name = $("#name-input").value.trim();
   const max_attempts = parseInt($("#attempts-input").value, 10) || 3;
@@ -132,28 +153,41 @@ function buildPayload() {
   if (model) common.model = model;
 
   if (currentMode === "registry") {
-    return { url: CONFIG.endpoints.scanRegistry, body: { target: $("#target-select").value, max_attempts } };
+    return { url: CONFIG.endpoints.scanRegistry,
+             body: { target: $("#target-select").value, max_attempts } };
   }
+
+  if (currentMode === "hosted") {
+    const image = $("#image-input").value.trim();
+    if (!image) throw new Error("Renseigne l'image Docker.");
+    const port = parseInt($("#port-input").value, 10);
+    if (!port) throw new Error("Renseigne le port interne de l'agent.");
+    const body = { ...common, image, container_port: port,
+                   target_format: $("#hosted-format").value,
+                   env: parseEnv($("#env-input").value) };
+    const dataDir = $("#data-input").value.trim();
+    if (dataDir) {
+      body.data_host_dir = dataDir;
+      body.data_mount_path = $("#mount-input").value.trim() || "/data";
+    }
+    const ready = $("#ready-input").value.trim();
+    if (ready) body.ready_path = ready;
+      const apiPath = $("#apipath-input").value.trim();
+    if (apiPath) body.api_path = apiPath;
+    return { url: CONFIG.endpoints.scanHosted, body: withAuth(body) };
+  }
+
   const url = $("#url-input").value.trim();
   if (!url) throw new Error("Renseigne l'URL de l'agent.");
   const fmt = $("#format-select").value;
-  if (fmt === "auto") {
-    return { url: CONFIG.endpoints.scanAuto, body: { ...common, url } };
-  }
-  if (fmt === "mcp") {
-    return { url: CONFIG.endpoints.scanMcp, body: { ...common, url } };
-  }
-  if (fmt === "openai") {
-    return { url: CONFIG.endpoints.scanOpenai, body: { ...common, url } };
-  }
-  return {
-    url: CONFIG.endpoints.scanFlat,
-    body: {
-      ...common, url,
-      request_field: $("#request-field").value.trim() || "message",
-      reply_field: $("#reply-field").value.trim() || "reply",
-    },
-  };
+  if (fmt === "auto")   return { url: CONFIG.endpoints.scanAuto,   body: withAuth({ ...common, url }) };
+  if (fmt === "mcp")    return { url: CONFIG.endpoints.scanMcp,    body: withAuth({ ...common, url }) };
+  if (fmt === "openai") return { url: CONFIG.endpoints.scanOpenai, body: withAuth({ ...common, url }) };
+  return { url: CONFIG.endpoints.scanFlat, body: withAuth({
+    ...common, url,
+    request_field: $("#request-field").value.trim() || "message",
+    reply_field: $("#reply-field").value.trim() || "reply",
+  }) };
 }
 
 function extractScanId(data) {
@@ -175,7 +209,7 @@ async function launchScan(e) {
     const data = await postJSON(req.url, req.body);
     const id = extractScanId(data);
     if (!id) throw new Error("Réponse sans identifiant de scan.");
-    showRunning(req.body.target || req.body.name || req.body.url);
+    showRunning(req.body.target || req.body.name || req.body.image || req.body.url);
     startPolling(id);
   } catch (err) {
     errBox.textContent = "Échec du lancement : " + err.message;

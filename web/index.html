@@ -59,7 +59,7 @@
   <!-- ===================== VUE : SCAN ===================== -->
   <header id="head-scan" class="page-head view-head">
     <h2>Nouveau scan</h2>
-    <p>Choisis une cible du registre ou un agent par URL, puis lance l'évaluation.</p>
+    <p>Choisis une cible du registre, un agent par URL, ou héberge une image Docker à scanner.</p>
   </header>
   <main id="view-scan" class="view layout">
     <!-- CONFIG -->
@@ -69,6 +69,7 @@
       <div class="modes" role="tablist">
         <button class="mode-btn active" data-mode="registry" role="tab" type="button">Cible du registre</button>
         <button class="mode-btn" data-mode="url" role="tab" type="button">Agent par URL</button>
+        <button class="mode-btn" data-mode="hosted" role="tab" type="button">Agent hébergé (Docker)</button>
       </div>
 
       <form id="scan-form">
@@ -100,6 +101,60 @@
         <div class="field group-url group-flat hidden">
           <label for="reply-field">Champ réponse</label>
           <input id="reply-field" type="text" placeholder="reply" />
+        </div>
+
+        <!-- Mode hébergé -->
+        <div class="field group-hosted hidden">
+          <label for="image-input">Image Docker</label>
+          <input id="image-input" type="text" placeholder="flowiseai/flowise" />
+        </div>
+        <div class="field-row group-hosted hidden">
+          <div class="field">
+            <label for="port-input">Port interne</label>
+            <input id="port-input" type="number" placeholder="3000" />
+          </div>
+          <div class="field">
+            <label for="ready-input">Chemin « ready » <span class="opt">(optionnel)</span></label>
+            <input id="ready-input" type="text" placeholder="/" />
+          </div>
+        </div>
+        <div class="field group-hosted hidden">
+          <label for="env-input">Variables d'env <span class="opt">(une par ligne, CLE=VALEUR)</span></label>
+          <textarea id="env-input" rows="3" placeholder="TOOL_FUNCTION_BUILTIN_DEP=*"></textarea>
+        </div>
+        <div class="field-row group-hosted hidden">
+          <div class="field">
+            <label for="data-input">Dossier de données <span class="opt">(optionnel)</span></label>
+            <input id="data-input" type="text" placeholder="C:\Users\mamme\ae-data" />
+          </div>
+          <div class="field">
+            <label for="mount-input">Point de montage</label>
+            <input id="mount-input" type="text" placeholder="/data" />
+          </div>
+        </div>
+        <div class="field group-hosted hidden">
+          <label for="hosted-format">Format de l'API</label>
+          <select id="hosted-format">
+            <option value="auto">Auto-détecter (recommandé)</option>
+            <option value="openai">OpenAI-compatible</option>
+            <option value="flat">JSON plat</option>
+            <option value="mcp">MCP</option>
+          </select>
+        </div>
+        <div class="field group-hosted hidden">
+          <label for="apipath-input">Chemin de l'API <span class="opt">(ex. /api/v1/prediction/&lt;id&gt;)</span></label>
+          <input id="apipath-input" type="text" placeholder="/api/v1/prediction/<id>" />
+        </div>
+        <!-- Auth (URL + hébergé) -->
+        <div class="field-row group-auth hidden">
+          <div class="field">
+            <label for="auth-header">Header d'auth <span class="opt">(optionnel)</span></label>
+            <input id="auth-header" type="text" placeholder="Authorization" />
+          </div>
+          <div class="field">
+            <label for="auth-value">Valeur</label>
+            <input id="auth-value" type="text" placeholder="Bearer sk-…" />
+          </div>
         </div>
 
         <!-- Commun -->

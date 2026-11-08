@@ -24,19 +24,20 @@ from .base import TargetResponse, TargetProfile
 
 
 class MCPTarget:
-    def __init__(self, url, name="mcp-agent", capabilities=None, timeout=60):
-        self.url = url.rstrip("/") + "/"       # JSON-RPC sur la racine
+    def __init__(self, url, name="mcp-agent", capabilities=None, timeout=60, headers=None):
+        self.url = url.rstrip("/") + "/"
         self._name = name
         self._caps = capabilities or []
         self._timeout = timeout
         self._tools_cache = None
+        self._headers = headers
 
     # ---- JSON-RPC ----
     def _rpc(self, method, params=None):
         body = {"jsonrpc": "2.0", "method": method, "id": 1}
         if params is not None:
             body["params"] = params
-        r = requests.post(self.url, json=body, timeout=self._timeout)
+            r = requests.post(self.url, json=body, headers=self._headers, timeout=self._timeout)
         return r.json()
 
     def list_tools(self):
