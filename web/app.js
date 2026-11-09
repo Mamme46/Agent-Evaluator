@@ -64,9 +64,11 @@ async function postJSON(url, body) {
 
 /* ---------- navigation entre vues ---------- */
 function setView(view) {
-  $$(".nav-tab").forEach((t) => t.classList.toggle("active", t.dataset.view === view));
+  $$(".nav-item").forEach((t) => t.classList.toggle("active", t.dataset.view === view));
   $("#view-scan").classList.toggle("hidden", view !== "scan");
   $("#view-history").classList.toggle("hidden", view !== "history");
+  $("#head-scan").classList.toggle("hidden", view !== "scan");
+  $("#head-history").classList.toggle("hidden", view !== "history");
   if (view === "history") {
     $("#history-report-panel").classList.add("hidden");
     $("#history-grid-panel").classList.remove("hidden");
@@ -536,7 +538,7 @@ function buildReportHTML(r) {
 
 /* ---------- init ---------- */
 document.addEventListener("DOMContentLoaded", () => {
-  $$(".nav-tab").forEach((t) => t.addEventListener("click", () => setView(t.dataset.view)));
+  $$(".nav-item").forEach((t) => t.addEventListener("click", (e) => { e.preventDefault(); setView(t.dataset.view); }));
   $$(".mode-btn").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
   $("#format-select").addEventListener("change", syncFlatFields);
   $("#target-select").addEventListener("change", updateTargetDesc);
