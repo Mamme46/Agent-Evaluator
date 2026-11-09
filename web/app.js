@@ -536,7 +536,6 @@ function buildReportHTML(r) {
   `;
 }
 
-/* ---------- init ---------- */
 document.addEventListener("DOMContentLoaded", () => {
   $$(".nav-item").forEach((t) => t.addEventListener("click", (e) => { e.preventDefault(); setView(t.dataset.view); }));
   $$(".mode-btn").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
