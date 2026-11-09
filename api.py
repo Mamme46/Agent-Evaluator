@@ -171,6 +171,111 @@ def scan_status(scan_id: str):
         raise HTTPException(status_code=404, detail="scan introuvable")
     return {"scan_id": scan_id, "status": SCANS[scan_id]["status"]}
 
+LAUNCHES: dict[str, dict] = {}
+
+
+class HostedLaunch(BaseModel):
+    image: str
+    container_port: int
+    env: dict = {}
+    data_host_dir: str | None = None
+    data_mount_path: str = "/data"
+    ready_path: str | None = None
+
+
+class HostedScanStep(BaseModel):
+    launch_id: str | None = None
+    url: str | None = None
+    container_id: str | None = None
+    api_path: str | None = None
+    target_format: str = "auto"
+    name: str = "agent-hébergé"
+    model: str = "gpt-4o"
+    max_attempts: int = 4
+    auth_header: str | None = None
+    auth_value: str | None = None
+    keep_alive: bool = False
+
+def _do_launch(launch_id: str, req: HostedLaunch) -> None:
+    from src.hosted.launcher import HostedSpec, launch
+    LAUNCHES[launch_id]["status"] = "launching"
+    try:
+        spec = HostedSpec(
+            image=req.image, container_port=req.container_port, env=req.env,
+            data_host_dir=req.data_host_dir, data_mount_path=req.data_mount_path,
+            ready_path=req.ready_path,
+        )
+        info = launch(spec)
+        LAUNCHES[launch_id].update(status="ready", url=info["url"],
+                                   port=info["port"], container_id=info["container_id"])
+    except Exception as e:
+        LAUNCHES[launch_id].update(status="error", detail=str(e))
+        print(f"[ERREUR launch {launch_id}] {e}")
+
+
+def _run_hosted_scan_step(scan_id: str, container_id: str, keep_alive: bool,
+                          scan_kwargs: dict) -> None:
+    from src.hosted.launcher import stop
+    SCANS[scan_id]["status"] = "running"
+    try:
+        SCANS[scan_id]["report"] = run_scan(**scan_kwargs)
+        SCANS[scan_id]["status"] = "done"
+    except Exception as e:
+        SCANS[scan_id]["status"] = "error"
+        SCANS[scan_id]["error"] = str(e)
+        print(f"[ERREUR scan {scan_id}] {e}")
+    finally:
+        if not keep_alive and container_id:
+            stop(container_id)
+
+
+@app.post("/hosted/launch")
+def hosted_launch(req: HostedLaunch, background_tasks: BackgroundTasks):
+    launch_id = str(uuid4())
+    LAUNCHES[launch_id] = {"status": "pending", "url": None, "port": None,
+                           "container_id": None, "detail": None}
+    background_tasks.add_task(_do_launch, launch_id, req)
+    return {"launch_id": launch_id, "status": "pending"}
+
+
+@app.get("/hosted/launch/{launch_id}")
+def hosted_launch_status(launch_id: str):
+    if launch_id not in LAUNCHES:
+        raise HTTPException(status_code=404, detail="lancement introuvable")
+    return {"launch_id": launch_id, **LAUNCHES[launch_id]}
+
+
+@app.post("/hosted/launch/{launch_id}/stop")
+def hosted_launch_stop(launch_id: str):
+    from src.hosted.launcher import stop
+    lan = LAUNCHES.get(launch_id)
+    if not lan:
+        raise HTTPException(status_code=404, detail="lancement introuvable")
+    if lan.get("container_id"):
+        stop(lan["container_id"])
+    lan["status"] = "stopped"
+    return {"launch_id": launch_id, "status": "stopped"}
+
+
+@app.post("/hosted/scan")
+def hosted_scan_step(req: HostedScanStep, background_tasks: BackgroundTasks):
+    lan = LAUNCHES.get(req.launch_id) if req.launch_id else None
+    if lan and lan.get("status") == "ready":
+        base, container_id = lan["url"], lan["container_id"]
+    elif req.url:
+        base, container_id = req.url, req.container_id
+    else:
+        raise HTTPException(status_code=409, detail="cible non prête (lance-la d'abord)")
+    scan_url = (base.rstrip("/") + "/" + req.api_path.lstrip("/")) if req.api_path else base
+    scan_id = _new_scan()
+    scan_kwargs = dict(
+        target_url=scan_url, target_format=req.target_format, name=req.name,
+        model=req.model, max_attempts=req.max_attempts,
+        auth_header=req.auth_header, auth_value=req.auth_value,
+    )
+    background_tasks.add_task(_run_hosted_scan_step, scan_id, container_id,
+                             req.keep_alive, scan_kwargs)
+    return {"scan_id": scan_id, "status": "pending"}
 
 @app.get("/report/{scan_id}")
 def get_report(scan_id: str):

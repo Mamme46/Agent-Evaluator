@@ -17,6 +17,7 @@ class HostedSpec:
     extra_args: list = field(default_factory=list)
     name: str = "ae_target"
     confine: bool = True
+    host_port: int | None = None
 
 
 def _free_port():
@@ -79,11 +80,17 @@ def stop(cid):
 
 def launch(spec: HostedSpec) -> dict:
     subprocess.run(["docker", "rm", "-f", spec.name], capture_output=True)
-    host_port = _free_port()
-    r = subprocess.run(_docker_cmd(spec, host_port), capture_output=True, text=True)
-    if r.returncode != 0:
-        raise RuntimeError(f"docker run a échoué : {r.stderr.strip()}")
-    cid = r.stdout.strip()
+    preferred = spec.host_port or spec.container_port
+    cid, host_port, last_err = None, None, ""
+    for candidate in (preferred, _free_port()):
+        r = subprocess.run(_docker_cmd(spec, candidate), capture_output=True, text=True)
+        if r.returncode == 0:
+            cid, host_port = r.stdout.strip(), candidate
+            break
+        last_err = r.stderr.strip()
+        subprocess.run(["docker", "rm", "-f", spec.name], capture_output=True)
+    if not cid:
+        raise RuntimeError(f"docker run a échoué : {last_err}")
     base = f"http://127.0.0.1:{host_port}"
     ready_url = base + spec.ready_path if spec.ready_path else None
     deadline = time.time() + spec.ready_timeout

@@ -132,19 +132,6 @@
             <input id="mount-input" type="text" placeholder="/data" />
           </div>
         </div>
-        <div class="field group-hosted hidden">
-          <label for="hosted-format">Format de l'API</label>
-          <select id="hosted-format">
-            <option value="auto">Auto-détecter (recommandé)</option>
-            <option value="openai">OpenAI-compatible</option>
-            <option value="flat">JSON plat</option>
-            <option value="mcp">MCP</option>
-          </select>
-        </div>
-        <div class="field group-hosted hidden">
-          <label for="apipath-input">Chemin de l'API <span class="opt">(ex. /api/v1/prediction/&lt;id&gt;)</span></label>
-          <input id="apipath-input" type="text" placeholder="/api/v1/prediction/<id>" />
-        </div>
         <!-- Auth (URL + hébergé) -->
         <div class="field-row group-auth hidden">
           <div class="field">
@@ -198,6 +185,40 @@
       </div>
 
       <div id="report-state" class="report hidden"></div>
+      <div id="hosted-config-state" class="hosted-config hidden">
+        <h3 class="panel-title">Cible lancée — configure-la</h3>
+        <p class="hint">Ouvre ta cible, configure-la (modèle, données, canari), génère une clé API, puis renseigne les champs ci-dessous et lance le scan.</p>
+        <a id="hosted-open-link" class="hist-back" target="_blank" rel="noopener">Ouvrir la cible ↗</a>
+        <div class="field">
+          <label for="cfg-apipath">Chemin de l'API</label>
+          <input id="cfg-apipath" type="text" placeholder="/api/v1/workspace/&lt;slug&gt;/chat" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="cfg-auth-header">Header d'auth</label>
+            <input id="cfg-auth-header" type="text" placeholder="Authorization" />
+          </div>
+          <div class="field">
+            <label for="cfg-auth-value">Valeur</label>
+            <input id="cfg-auth-value" type="text" placeholder="Bearer …" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="cfg-format">Format</label>
+          <select id="cfg-format">
+            <option value="auto">Auto-détecter (recommandé)</option>
+            <option value="openai">OpenAI-compatible</option>
+            <option value="flat">JSON plat</option>
+            <option value="mcp">MCP</option>
+          </select>
+        </div>
+        <label class="cfg-keep"><input type="checkbox" id="cfg-keep" /> Garder le conteneur après le scan</label>
+        <div class="field-row">
+          <button id="cfg-scan-btn" class="launch" type="button">Lancer le scan</button>
+          <button id="cfg-stop-btn" class="stop" type="button">Arrêter la cible</button>
+        </div>
+        <p id="cfg-status" class="form-error hidden"></p>
+      </div>
     </section>
   </main>
 

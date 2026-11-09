@@ -19,6 +19,10 @@ const CONFIG = {
     history:      "/history",
     historyFile:  (f) => `/history/${encodeURIComponent(f)}`,
     scanHosted:   "/scan/hosted",
+    hostedLaunch:       "/hosted/launch",
+    hostedLaunchStatus: (id) => `/hosted/launch/${id}`,
+    hostedLaunchStop:   (id) => `/hosted/launch/${id}/stop`,
+    hostedScan:         "/hosted/scan",
   },
   doneStatuses:  ["done", "terminé", "termine", "completed", "finished", "ok"],
   errorStatuses: ["error", "erreur", "failed", "échec", "echec"],
@@ -75,6 +79,10 @@ let currentMode = "registry";
 let pollTimer = null;
 let currentScanId = null;
 let targetsCache = [];
+let currentLaunchId = null;
+let launchPollTimer = null;
+let currentLaunchUrl = null;
+let currentContainerId = null;
 
 function setMode(mode) {
   currentMode = mode;
@@ -82,7 +90,7 @@ function setMode(mode) {
   $$(".group-registry").forEach((e) => e.classList.toggle("hidden", mode !== "registry"));
   $$(".group-url").forEach((e) => e.classList.toggle("hidden", mode !== "url"));
   $$(".group-hosted").forEach((e) => e.classList.toggle("hidden", mode !== "hosted"));
-  $$(".group-auth").forEach((e) => e.classList.toggle("hidden", mode === "registry"));
+  $$(".group-auth").forEach((e) => e.classList.toggle("hidden", mode !== "url"));
   if (mode === "url") syncFlatFields();
 }
 
@@ -157,26 +165,6 @@ function buildPayload() {
              body: { target: $("#target-select").value, max_attempts } };
   }
 
-  if (currentMode === "hosted") {
-    const image = $("#image-input").value.trim();
-    if (!image) throw new Error("Renseigne l'image Docker.");
-    const port = parseInt($("#port-input").value, 10);
-    if (!port) throw new Error("Renseigne le port interne de l'agent.");
-    const body = { ...common, image, container_port: port,
-                   target_format: $("#hosted-format").value,
-                   env: parseEnv($("#env-input").value) };
-    const dataDir = $("#data-input").value.trim();
-    if (dataDir) {
-      body.data_host_dir = dataDir;
-      body.data_mount_path = $("#mount-input").value.trim() || "/data";
-    }
-    const ready = $("#ready-input").value.trim();
-    if (ready) body.ready_path = ready;
-      const apiPath = $("#apipath-input").value.trim();
-    if (apiPath) body.api_path = apiPath;
-    return { url: CONFIG.endpoints.scanHosted, body: withAuth(body) };
-  }
-
   const url = $("#url-input").value.trim();
   if (!url) throw new Error("Renseigne l'URL de l'agent.");
   const fmt = $("#format-select").value;
@@ -199,6 +187,7 @@ async function launchScan(e) {
   const errBox = $("#form-error");
   errBox.classList.add("hidden");
   const btn = $("#launch-btn");
+  if (currentMode === "hosted") { launchHostedContainer(errBox, btn); return; }
 
   let req;
   try { req = buildPayload(); }
@@ -216,6 +205,115 @@ async function launchScan(e) {
     errBox.classList.remove("hidden");
     btn.disabled = false;
   }
+}
+
+function launchHostedContainer(errBox, btn) {
+  const image = $("#image-input").value.trim();
+  if (!image) { errBox.textContent = "Renseigne l'image Docker."; errBox.classList.remove("hidden"); return; }
+  const port = parseInt($("#port-input").value, 10);
+  if (!port) { errBox.textContent = "Renseigne le port interne."; errBox.classList.remove("hidden"); return; }
+
+  const body = { image, container_port: port, env: parseEnv($("#env-input").value) };
+  const dataDir = $("#data-input").value.trim();
+  if (dataDir) { body.data_host_dir = dataDir; body.data_mount_path = $("#mount-input").value.trim() || "/data"; }
+  const ready = $("#ready-input").value.trim();
+  if (ready) body.ready_path = ready;
+
+  btn.disabled = true;
+  showHostedLaunching();
+  postJSON(CONFIG.endpoints.hostedLaunch, body)
+    .then((data) => { currentLaunchId = data.launch_id; pollLaunch(currentLaunchId); })
+    .catch((err) => { showError("Échec du lancement : " + err.message); btn.disabled = false; });
+}
+
+function pollLaunch(id) {
+  clearInterval(launchPollTimer);
+  const tick = async () => {
+    try {
+      const st = await getJSON(CONFIG.endpoints.hostedLaunchStatus(id));
+      if (st.status === "ready") {
+        clearInterval(launchPollTimer);
+        currentLaunchUrl = st.url;
+        currentContainerId = st.container_id;
+        showHostedConfig(st.url);
+      } else if (st.status === "error") {
+        clearInterval(launchPollTimer);
+        showError("Lancement échoué : " + (st.detail || ""));
+        $("#launch-btn").disabled = false;
+      } else {
+        $("#running-sub").textContent = "Démarrage du conteneur… (" + st.status + ")";
+      }
+    } catch (err) {
+      clearInterval(launchPollTimer);
+      showError("Perte de contact : " + err.message);
+    }
+  };
+  tick();
+  launchPollTimer = setInterval(tick, 3000);
+}
+
+function showHostedLaunching() {
+  $("#empty-state").classList.add("hidden");
+  $("#report-state").classList.add("hidden");
+  $("#hosted-config-state").classList.add("hidden");
+  $("#running-state").classList.remove("hidden");
+  $("#stop-btn").classList.add("hidden");
+  $("#running-title").textContent = "Lancement de la cible…";
+  $("#running-sub").textContent = "Démarrage du conteneur";
+}
+
+function showHostedConfig(url) {
+  $("#running-state").classList.add("hidden");
+  const link = $("#hosted-open-link");
+  link.href = url;
+  link.textContent = "Ouvrir la cible : " + url + " ↗";
+  $("#hosted-config-state").classList.remove("hidden");
+}
+
+async function launchHostedScan() {
+  if (!currentLaunchId) return;
+  const btn = $("#cfg-scan-btn");
+  const status = $("#cfg-status");
+  status.classList.add("hidden");
+  const body = {
+    launch_id: currentLaunchId,
+    target_format: $("#cfg-format").value,
+    url: currentLaunchUrl,
+    container_id: currentContainerId,
+    keep_alive: $("#cfg-keep").checked,
+    max_attempts: parseInt($("#attempts-input").value, 10) || 3,
+  };
+  const ap = $("#cfg-apipath").value.trim();
+  if (ap) body.api_path = ap;
+  const h = $("#cfg-auth-header").value.trim(), v = $("#cfg-auth-value").value.trim();
+  if (h && v) { body.auth_header = h; body.auth_value = v; }
+  const name = $("#name-input").value.trim(); if (name) body.name = name;
+  const model = $("#model-input").value.trim(); if (model) body.model = model;
+
+  btn.disabled = true;
+  try {
+    const data = await postJSON(CONFIG.endpoints.hostedScan, body);
+    const sid = extractScanId(data);
+    if (!sid) throw new Error("Réponse sans identifiant de scan.");
+    $("#hosted-config-state").classList.add("hidden");
+    showRunning("cible hébergée");
+    startPolling(sid);
+  } catch (err) {
+    status.textContent = "Échec : " + err.message;
+    status.classList.remove("hidden");
+    btn.disabled = false;
+  }
+}
+
+async function stopHostedLaunch() {
+  if (currentLaunchId) {
+    try { await postJSON(CONFIG.endpoints.hostedLaunchStop(currentLaunchId), {}); } catch {}
+  }
+  clearInterval(launchPollTimer);
+  currentLaunchId = null;
+  $("#hosted-config-state").classList.add("hidden");
+  $("#empty-state").classList.remove("hidden");
+  $("#launch-btn").disabled = false;
 }
 
 /* ---------- polling ---------- */
@@ -311,6 +409,7 @@ async function stopScan() {
 
 /* ---------- affichage (vue scan) ---------- */
 function showRunning(label) {
+  $("#stop-btn").classList.remove("hidden");
   $("#empty-state").classList.add("hidden");
   $("#report-state").classList.add("hidden");
   $("#running-state").classList.remove("hidden");
@@ -447,6 +546,8 @@ document.addEventListener("DOMContentLoaded", () => {
     $("#history-report-panel").classList.add("hidden");
     $("#history-grid-panel").classList.remove("hidden");
   });
+  $("#cfg-scan-btn").addEventListener("click", launchHostedScan);
+  $("#cfg-stop-btn").addEventListener("click", stopHostedLaunch);
   setMode("registry");
   setView("scan");
   loadTargets();

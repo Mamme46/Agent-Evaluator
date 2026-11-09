@@ -52,6 +52,7 @@ _JSON_EXTRACTORS = [
     ("data.message",               _nested("data", "message")),
     ("output.text",                _nested("output", "text")),
     ("message.content",            _nested("message", "content")),
+    ("textResponse",               _top("textResponse")),
 ]
 
 
