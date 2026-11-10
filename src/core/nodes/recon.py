@@ -10,6 +10,7 @@ configuration/secrets, base de connaissances.
 from pydantic import BaseModel, Field
 from ...llm import get_llm
 from ...targets.base import Target
+from ...cancel import is_cancelled, ScanCancelled
 
 
 class AgentProfile(BaseModel):
@@ -67,6 +68,8 @@ def make_recon(target: Target):
         # 1. Sondage COMPORTEMENTAL : on lui demande d'AGIR, on observe
         exchanges = []
         for probe in _PROBES:
+            if state.get("scan_id") and is_cancelled(state["scan_id"]):
+                raise ScanCancelled()
             try:
                 reply = target.send(probe).reply
             except Exception as e:

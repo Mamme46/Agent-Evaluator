@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from src.service import run_scan, run_hosted_scan
 from src.targets.registry import list_targets, target_exists
+from src.cancel import request_cancel, clear, ScanCancelled
 import json
 from pathlib import Path
 
@@ -17,7 +18,6 @@ app = FastAPI(title="Mon API", version="0.1.0")
 SCANS: dict[str, dict] = {}
 
 
-# --- Formes de requête ---
 class RegistryScan(BaseModel):
     target: str = "helpbot"
     max_attempts: int = 4
@@ -67,110 +67,6 @@ class HostedScan(BaseModel):
     auth_value: str | None = None
 
 
-def _new_scan() -> str:
-    scan_id = str(uuid4())
-    SCANS[scan_id] = {"status": "pending", "report": None, "error": None}
-    return scan_id
-
-
-def _execute(scan_id: str, _runner=run_scan, **kwargs) -> None:
-    SCANS[scan_id]["status"] = "running"
-    try:
-        SCANS[scan_id]["report"] = _runner(**kwargs)
-        SCANS[scan_id]["status"] = "done"
-    except Exception as e:
-        SCANS[scan_id]["status"] = "error"
-        SCANS[scan_id]["error"] = str(e)
-        print(f"[ERREUR scan {scan_id}] {e}")   # visible dans le terminal
-
-
-@app.get("/targets")
-def get_targets():
-    """Liste les cibles du catalogue (registre)."""
-    return {"targets": list_targets()}
-
-
-@app.post("/scan/registry")
-def scan_registry(req: RegistryScan, background_tasks: BackgroundTasks):
-    """Scanne une cible du catalogue, par son nom."""
-    if not target_exists(req.target):
-        raise HTTPException(status_code=404, detail=f"cible inconnue : {req.target}")
-    scan_id = _new_scan()
-    background_tasks.add_task(_execute, scan_id, target_name=req.target, max_attempts=req.max_attempts)
-    return {"scan_id": scan_id, "status": "pending", "target": req.target}
-
-
-@app.post("/scan/url/flat")
-def scan_url_flat(req: FlatURLScan, background_tasks: BackgroundTasks):
-    """Scanne un agent à format PLAT ({champ} -> {champ})."""
-    scan_id = _new_scan()
-    background_tasks.add_task(
-        _execute, scan_id,
-        target_url=req.url, target_format="flat", name=req.name,
-        request_field=req.request_field, reply_field=req.reply_field,
-        max_attempts=req.max_attempts,
-        auth_header=req.auth_header, auth_value=req.auth_value,
-    )
-    return {"scan_id": scan_id, "status": "pending", "url": req.url}
-
-
-@app.post("/scan/url/openai")
-def scan_url_openai(req: OpenAIURLScan, background_tasks: BackgroundTasks):
-    """Scanne un agent compatible OpenAI (/v1/chat/completions)."""
-    scan_id = _new_scan()
-    background_tasks.add_task(
-        _execute, scan_id,
-        target_url=req.url, target_format="openai", name=req.name,
-        model=req.model, max_attempts=req.max_attempts,
-        auth_header=req.auth_header, auth_value=req.auth_value,
-    )
-    return {"scan_id": scan_id, "status": "pending", "url": req.url}
-
-
-@app.post("/scan/url/auto")
-def scan_url_auto(req: AutoURLScan, background_tasks: BackgroundTasks):
-    """Scanne un agent dont le format est AUTO-DÉTECTÉ (aucun champ à préciser)."""
-    scan_id = _new_scan()
-    background_tasks.add_task(
-        _execute, scan_id,
-        target_url=req.url, target_format="auto", name=req.name,
-        model=req.model, max_attempts=req.max_attempts,
-        auth_header=req.auth_header, auth_value=req.auth_value,
-    )
-    return {"scan_id": scan_id, "status": "pending", "url": req.url}
-
-
-@app.post("/scan/hosted")
-def scan_hosted(req: HostedScan, background_tasks: BackgroundTasks):
-    """Lance une cible en conteneur Docker, la scanne, puis la détruit."""
-    scan_id = _new_scan()
-    background_tasks.add_task(
-        _execute, scan_id, _runner=run_hosted_scan,
-        image=req.image, container_port=req.container_port, env=req.env,
-        data_host_dir=req.data_host_dir, data_mount_path=req.data_mount_path,
-        ready_path=req.ready_path, api_path=req.api_path, target_format=req.target_format,
-        name=req.name, model=req.model, max_attempts=req.max_attempts,
-        auth_header=req.auth_header, auth_value=req.auth_value,
-    )
-    return {"scan_id": scan_id, "status": "pending", "image": req.image}
-
-
-@app.post("/scan/{scan_id}/cancel")
-def cancel_scan(scan_id: str):
-    if scan_id not in SCANS:
-        raise HTTPException(status_code=404, detail="scan introuvable")
-    SCANS[scan_id]["cancel"] = True
-    if SCANS[scan_id]["status"] in ("pending", "running"):
-        SCANS[scan_id]["status"] = "cancelled"
-    return {"scan_id": scan_id, "status": SCANS[scan_id]["status"]}
-
-
-@app.get("/scan/{scan_id}")
-def scan_status(scan_id: str):
-    if scan_id not in SCANS:
-        raise HTTPException(status_code=404, detail="scan introuvable")
-    return {"scan_id": scan_id, "status": SCANS[scan_id]["status"]}
-
 LAUNCHES: dict[str, dict] = {}
 
 
@@ -196,6 +92,29 @@ class HostedScanStep(BaseModel):
     auth_value: str | None = None
     keep_alive: bool = False
 
+
+def _new_scan() -> str:
+    scan_id = str(uuid4())
+    SCANS[scan_id] = {"status": "pending", "report": None, "error": None}
+    return scan_id
+
+
+def _execute(scan_id: str, _runner=run_scan, **kwargs) -> None:
+    SCANS[scan_id]["status"] = "running"
+    try:
+        SCANS[scan_id]["report"] = _runner(scan_id=scan_id, **kwargs)
+        SCANS[scan_id]["status"] = "done"
+    except ScanCancelled:
+        SCANS[scan_id]["status"] = "cancelled"
+        print(f"[scan {scan_id}] annulé")
+    except Exception as e:
+        SCANS[scan_id]["status"] = "error"
+        SCANS[scan_id]["error"] = str(e)
+        print(f"[ERREUR scan {scan_id}] {e}")
+    finally:
+        clear(scan_id)
+
+
 def _do_launch(launch_id: str, req: HostedLaunch) -> None:
     from src.hosted.launcher import HostedSpec, launch
     LAUNCHES[launch_id]["status"] = "launching"
@@ -218,15 +137,84 @@ def _run_hosted_scan_step(scan_id: str, container_id: str, keep_alive: bool,
     from src.hosted.launcher import stop
     SCANS[scan_id]["status"] = "running"
     try:
-        SCANS[scan_id]["report"] = run_scan(**scan_kwargs)
+        SCANS[scan_id]["report"] = run_scan(scan_id=scan_id, **scan_kwargs)
         SCANS[scan_id]["status"] = "done"
+    except ScanCancelled:
+        SCANS[scan_id]["status"] = "cancelled"
+        print(f"[scan {scan_id}] annulé")
     except Exception as e:
         SCANS[scan_id]["status"] = "error"
         SCANS[scan_id]["error"] = str(e)
         print(f"[ERREUR scan {scan_id}] {e}")
     finally:
+        clear(scan_id)
         if not keep_alive and container_id:
             stop(container_id)
+
+
+@app.get("/targets")
+def get_targets():
+    return {"targets": list_targets()}
+
+
+@app.post("/scan/registry")
+def scan_registry(req: RegistryScan, background_tasks: BackgroundTasks):
+    if not target_exists(req.target):
+        raise HTTPException(status_code=404, detail=f"cible inconnue : {req.target}")
+    scan_id = _new_scan()
+    background_tasks.add_task(_execute, scan_id, target_name=req.target, max_attempts=req.max_attempts)
+    return {"scan_id": scan_id, "status": "pending", "target": req.target}
+
+
+@app.post("/scan/url/flat")
+def scan_url_flat(req: FlatURLScan, background_tasks: BackgroundTasks):
+    scan_id = _new_scan()
+    background_tasks.add_task(
+        _execute, scan_id,
+        target_url=req.url, target_format="flat", name=req.name,
+        request_field=req.request_field, reply_field=req.reply_field,
+        max_attempts=req.max_attempts,
+        auth_header=req.auth_header, auth_value=req.auth_value,
+    )
+    return {"scan_id": scan_id, "status": "pending", "url": req.url}
+
+
+@app.post("/scan/url/openai")
+def scan_url_openai(req: OpenAIURLScan, background_tasks: BackgroundTasks):
+    scan_id = _new_scan()
+    background_tasks.add_task(
+        _execute, scan_id,
+        target_url=req.url, target_format="openai", name=req.name,
+        model=req.model, max_attempts=req.max_attempts,
+        auth_header=req.auth_header, auth_value=req.auth_value,
+    )
+    return {"scan_id": scan_id, "status": "pending", "url": req.url}
+
+
+@app.post("/scan/url/auto")
+def scan_url_auto(req: AutoURLScan, background_tasks: BackgroundTasks):
+    scan_id = _new_scan()
+    background_tasks.add_task(
+        _execute, scan_id,
+        target_url=req.url, target_format="auto", name=req.name,
+        model=req.model, max_attempts=req.max_attempts,
+        auth_header=req.auth_header, auth_value=req.auth_value,
+    )
+    return {"scan_id": scan_id, "status": "pending", "url": req.url}
+
+
+@app.post("/scan/hosted")
+def scan_hosted(req: HostedScan, background_tasks: BackgroundTasks):
+    scan_id = _new_scan()
+    background_tasks.add_task(
+        _execute, scan_id, _runner=run_hosted_scan,
+        image=req.image, container_port=req.container_port, env=req.env,
+        data_host_dir=req.data_host_dir, data_mount_path=req.data_mount_path,
+        ready_path=req.ready_path, api_path=req.api_path, target_format=req.target_format,
+        name=req.name, model=req.model, max_attempts=req.max_attempts,
+        auth_header=req.auth_header, auth_value=req.auth_value,
+    )
+    return {"scan_id": scan_id, "status": "pending", "image": req.image}
 
 
 @app.post("/hosted/launch")
@@ -277,6 +265,25 @@ def hosted_scan_step(req: HostedScanStep, background_tasks: BackgroundTasks):
                              req.keep_alive, scan_kwargs)
     return {"scan_id": scan_id, "status": "pending"}
 
+
+@app.post("/scan/{scan_id}/cancel")
+def cancel_scan(scan_id: str):
+    if scan_id not in SCANS:
+        raise HTTPException(status_code=404, detail="scan introuvable")
+    request_cancel(scan_id)
+    SCANS[scan_id]["cancel"] = True
+    if SCANS[scan_id]["status"] in ("pending", "running"):
+        SCANS[scan_id]["status"] = "cancelled"
+    return {"scan_id": scan_id, "status": SCANS[scan_id]["status"]}
+
+
+@app.get("/scan/{scan_id}")
+def scan_status(scan_id: str):
+    if scan_id not in SCANS:
+        raise HTTPException(status_code=404, detail="scan introuvable")
+    return {"scan_id": scan_id, "status": SCANS[scan_id]["status"]}
+
+
 @app.get("/report/{scan_id}")
 def get_report(scan_id: str):
     if scan_id not in SCANS:
@@ -291,7 +298,6 @@ def get_report(scan_id: str):
 
 @app.get("/history")
 def history():
-    """Liste les scans passés (lus depuis le dossier reports/)."""
     items = []
     if REPORTS_DIR.exists():
         for p in sorted(REPORTS_DIR.glob("scan_*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -313,15 +319,13 @@ def history():
 
 @app.get("/history/{file}")
 def history_report(file: str):
-    """Renvoie le contenu d'un rapport archivé."""
-    safe = Path(file).name          # empêche la traversée de dossier
+    safe = Path(file).name
     p = REPORTS_DIR / safe
     if p.suffix != ".json" or not p.exists():
         raise HTTPException(status_code=404, detail="rapport introuvable")
     return json.loads(p.read_text(encoding="utf-8"))
 
 
-# ─── Dashboard web (doit venir APRÈS tous les endpoints) ───
 app.mount("/static", StaticFiles(directory="web"), name="static")
 
 

@@ -12,6 +12,7 @@ from ..state import State
 from ...llm import get_llm
 from ..leak_detector import detect_leaks
 from ..trajectory_analyzer import analyze_trajectory
+from ...cancel import is_cancelled, ScanCancelled
 
 
 class Verdict(BaseModel):
@@ -33,6 +34,8 @@ def _format_trajectoire(traj: list[dict]) -> str:
 
 
 def judge(state: State) -> dict:
+    if state.get("scan_id") and is_cancelled(state["scan_id"]):
+        raise ScanCancelled()
     goal = state["goals"][state["goal_idx"]]
     reponse_cible = state["conversation"][-1]["msg"]
     payload = state["conversation"][-2]["msg"]

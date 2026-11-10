@@ -11,6 +11,7 @@ import json
 from ..state import State
 from ...llm import get_llm, ATTACKER_MODEL
 from ...attacks.payload_library import pick as pick_payload
+from ...cancel import is_cancelled, ScanCancelled
 
 _FUZZ = [
     (("path", "file", "dir", "filepath"), "../../../../etc/passwd"),
@@ -106,7 +107,8 @@ def _build_prompt(state: State, goal: dict, intent: str, strategy: str) -> str:
 def attacker(state: State) -> dict:
     goal = state["goals"][state["goal_idx"]]
     attempt_no = state["attempt"] + 1
-
+    if state.get("scan_id") and is_cancelled(state["scan_id"]):
+        raise ScanCancelled()
     if state.get("mcp_tools"):
         injections = goal.get("injections")
         if injections and goal.get("tool"):

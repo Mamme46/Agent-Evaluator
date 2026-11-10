@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field
 from ...llm import get_llm
 from ...attacks.mcp_objectives import make_mcp_goals
+from ...cancel import is_cancelled, ScanCancelled
 
 class GeneratedGoal(BaseModel):
     id: str
@@ -22,6 +23,8 @@ _planner_llm = get_llm(temperature=0.4).with_structured_output(AttackPlan)
 
 def planner(state) -> dict:
 
+    if state.get("scan_id") and is_cancelled(state["scan_id"]):
+        raise ScanCancelled()
     mcp_tools = state.get("mcp_tools")
     if mcp_tools:
         goals = make_mcp_goals(mcp_tools)

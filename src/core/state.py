@@ -22,7 +22,7 @@ class State(TypedDict, total=False):
     # --- Plan de campagne (boucle externe) ---
     goals: list[dict]          # objectifs choisis par le planner
     goal_idx: int              # index de l'objectif en cours
-
+    scan_id: str
     # --- Attaque adaptative en cours (boucle interne) ---
     attempt: int               # n° de tentative sur l'objectif courant
     max_attempts: int          # plafond de tentatives par objectif
