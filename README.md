@@ -17,7 +17,6 @@ L'objectif : donner à un développeur ou un auditeur un verdict clair, axe par 
 - [Les trois modes de scan](#les-trois-modes-de-scan)
 - [Rapports & historique](#rapports--historique)
 - [Usage responsable](#usage-responsable)
-- [Feuille de route](#feuille-de-route)
 
 ---
 
@@ -54,7 +53,7 @@ Agent-Evaluator/
 │   ├── core/
 │   │   ├── graph.py    # Graphe LangGraph : Construction des boucles internes et externes 
 │   │   ├── state.py    # État partagé du graphe
-│   │   └── nodes/      # Les 4 pilliers de base : recon, planner, attacker, judge
+│   │   └── nodes/      # Les 4 piliers de base : recon, planner, attacker, judge
 │   ├── targets/        # Adaptateurs (HTTP plat, OpenAI, auto et MCP)
 │   └── hosted/         # Lanceur Docker (scan hébergé)
 └── reports/            # Rapports des scans éffectués
@@ -103,6 +102,7 @@ Ce que font les options :
 | `--add-host host.docker.internal:host-gateway` | Rend l'hôte joignable depuis le conteneur. |
 
 Note (scan hébergé conteneurisé) : quand la plateforme tourne elle-même dans un conteneur et lance des conteneurs cibles, ceux-ci sont des frères sur l'hôte. Le mode URL fonctionnent tel quel; le mode hébergé nécessite un ajustement réseau (joindre la cible via host.docker.internal:<port> au lieu de 127.0.0.1).
+
 ---
 
 ## Lancement en local (dev)
