@@ -18,4 +18,4 @@ def get_llm(temperature: float = 0.0, model: str | None = None):
     if model.startswith("gpt-"):                    # ← LE branchement clé
         return ChatOpenAI(model=model, temperature=temperature,
                           api_key=os.environ["OPENAI_API_KEY"])
-    return ChatOllama(model=model, temperature=temperature)
+    return ChatOllama(model=model, temperature=temperature, base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))

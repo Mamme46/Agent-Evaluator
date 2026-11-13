@@ -12,3 +12,4 @@ src/targets/__pycache__/
 # Divers
 .DS_Store
 .vscode/
+reports/.gitkeep

@@ -12,7 +12,7 @@ from .http_target import HTTPTarget
 _REGISTRY: dict[str, dict] = {
     "helpbot": {
         "build": dummy_agent.build,                    # agent EN-PROCESS (Python)
-        "description": "Agent SAV jouet (ACME), volontairement vulnérable. Cible d'entraînement.",
+        "description": "Cible d'entraînement",
     },
     "helpbot_http": {
         "build": lambda: HTTPTarget(                   # même agent, servi en HTTP

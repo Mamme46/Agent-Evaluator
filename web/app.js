@@ -1,10 +1,3 @@
-/* ============================================================
-   Agent-Evaluator — logique du dashboard (vanilla JS)
-   La page est servie par FastAPI (même origine) → pas de CORS.
-
-   ⚙️  TOUTES LES HYPOTHÈSES SUR TON API SONT ICI (bloc CONFIG).
-   ============================================================ */
-
 const CONFIG = {
   endpoints: {
     targets:      "/targets",
@@ -101,6 +94,26 @@ function syncFlatFields() {
   $$(".group-flat").forEach((e) => e.classList.toggle("hidden", !flat));
 }
 
+/* ---------- rubriques (À distance / Hébergé) + sous-choix ---------- */
+function selectKind(kind) {
+  $$(".kind").forEach((k) => k.classList.toggle("active", k.dataset.kind === kind));
+  const remote = kind === "remote";
+  $("#submodes").classList.toggle("hidden", !remote);
+  const lbl = $("#launch-btn .launch-label");
+  if (lbl) lbl.textContent = remote ? "Lancer le scan" : "Démarrer la cible";
+  if (remote) {
+    const el = $(".submode.active");
+    setMode(el ? el.dataset.sub : "registry");
+  } else {
+    setMode("hosted");
+  }
+}
+
+function selectSub(sub) {
+  $$(".submode").forEach((s) => s.classList.toggle("active", s.dataset.sub === sub));
+  setMode(sub);
+}
+
 /* ---------- cibles du registre ---------- */
 function normalizeTargets(data) {
   let list = Array.isArray(data) ? data : (data.targets || data.cibles || null);
@@ -118,14 +131,11 @@ async function loadTargets() {
   try {
     const data = await getJSON(CONFIG.endpoints.targets);
     targetsCache = normalizeTargets(data);
-    const sel = $("#target-select");
-    sel.innerHTML = targetsCache.map((t) => `<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
+    $("#target-select").innerHTML = targetsCache.map((t) => `<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
     updateTargetDesc();
-    status.classList.add("ok"); status.classList.remove("down");
-    status.querySelector(".label").textContent = "API connectée";
+    if (status) { status.classList.add("ok"); status.classList.remove("down"); status.querySelector(".label").textContent = "API connectée"; }
   } catch {
-    status.classList.add("down"); status.classList.remove("ok");
-    status.querySelector(".label").textContent = "API injoignable";
+    if (status) { status.classList.add("down"); status.classList.remove("ok"); status.querySelector(".label").textContent = "API injoignable"; }
     $("#target-select").innerHTML = `<option>— API hors ligne —</option>`;
   }
 }
@@ -538,7 +548,8 @@ function buildReportHTML(r) {
 
 document.addEventListener("DOMContentLoaded", () => {
   $$(".nav-item").forEach((t) => t.addEventListener("click", (e) => { e.preventDefault(); setView(t.dataset.view); }));
-  $$(".mode-btn").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+  $$(".kind").forEach((k) => k.addEventListener("click", () => selectKind(k.dataset.kind)));
+  $$(".submode").forEach((s) => s.addEventListener("click", () => selectSub(s.dataset.sub)));
   $("#format-select").addEventListener("change", syncFlatFields);
   $("#target-select").addEventListener("change", updateTargetDesc);
   $("#scan-form").addEventListener("submit", launchScan);
@@ -549,7 +560,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   $("#cfg-scan-btn").addEventListener("click", launchHostedScan);
   $("#cfg-stop-btn").addEventListener("click", stopHostedLaunch);
-  setMode("registry");
+  selectKind("remote");
   setView("scan");
   loadTargets();
 });
